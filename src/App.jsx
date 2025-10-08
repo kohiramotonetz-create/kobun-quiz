@@ -1,98 +1,55 @@
 import React, { useEffect, useRef, useState } from "react";
 
-// 古文単語テスト（片方一致OK・20問ランダム・直近の結果・タイマー・スプレッドシート送信・日本時間対応）
+// 古文単語テスト（20問ランダム・ゆるい判定・直近の結果・タイマー・結果送信 / モバイル最適化デザイン）
 
 const SHEETS_URL = "https://script.google.com/macros/s/AKfycbzht7VwuVCntcM-5sq7IFlJx5_U88z7e7tpKsW6Bj3MssUFe8_JFXlawxQ9qXvb4lmH/exec";
 
-const DEFAULT_CSV = `問題番号,古文単語,日本語訳
-1,をかし,趣がある・風情がある
-2,いみじ,とても・すばらしい
-3,あはれ,しみじみとした情趣がある・しみじみ
-4,あやし,不思議だ・身分が低い
-5,ありがたし,めったにない
-6,うつくし,かわいい
-7,うし(憂し),つらい
-8,あさまし,驚きあきれる
-9,いと,とても
-10,いにしへ,昔
-11,いづ,出る
-12,いづこ,どこ
-13,いづれ,どちら
-14,おはす,いらっしゃる
-15,おぼす,お思いになる
-16,のたまふ,おっしゃる
-17,侍り,ございます（丁寧語）
-18,やがて,すぐに・そのまま
-19,やうやう,だんだん
-20,めでたし,すばらしい
-21,かなし,いとおしい・かわいい
-22,かたし,難しい
-23,かぎりなし,この上ない
-24,けしき,様子・態度
-25,さま,様子
-26,さらば,そうならば
-27,さりとて,そうかといって
-28,しのぶ,がまんする・思い出す
-29,す,する
-30,ず,〜ない
-31,すべ,方法・手段
-32,ためし,例・手本
-33,つきづきし,ふさわしい
-34,つとめて,早朝
-35,つれづれ,退屈だ・所在ない
-36,としごろ,長年
-37,とて,〜といって
-38,ども,〜けれども
-39,なり,〜にいる・ある・〜である
-40,なんぢ,おまえ
-41,にあらず,〜ではない
-42,にはか,急に
-43,はなはだ,とても
-44,ひさし(久し),長い
-45,ふみ,手紙・文書
-46,む(ん),〜だろう・〜しよう
-47,よし,理由・方法
-48,よろづ,すべて・いろいろ
-49,ありがたし,めったにない
-50,いとほし,気の毒だ
-51,あな,ああ・あら
-52,あまた,たくさん
-53,あやなし,筋が通らない
-54,あし,悪い
-55,あり,存在する
-56,口惜し,残念だ
-57,けり,〜た（過去）
-58,ごとし,〜のようだ
-59,ことわり(理),道理
-60,かく,このように
-61,かかる,このような
-62,いはく(曰く),言うことには
-63,いとど,ますます
-64,おのれ,自分・お前
-65,おのづから,自然に・ひとりで
-66,おきな,おじいさん
-67,いかで,どうして・なんとかして
-68,いかなる,どういう
-69,いかに,なぜ・どのように
-70,いざ,さあ
-71,をかし,趣がある・風情がある
-72,あした,早朝・朝
-73,ゆゑ,〜のため・理由
-74,さま,様子
-75,かなし,かわいい
-76,ありがたし,めったにない
-77,うつくし,かわいい
-78,いと,とても
-79,けしき,様子・態度
-80,しのぶ,がまんする`;
+// 80語（必要に応じて差し替え可）
+const DEFAULT_CSV = `問題番号,古文単語,日本語訳\n1,をかし,趣がある・風情がある\n2,いみじ,とても・すばらしい\n3,あはれ,しみじみとした情趣がある・しみじみ\n4,あやし,不思議だ・身分が低い\n5,ありがたし,めったにない\n6,うつくし,かわいい\n7,うし(憂し),つらい\n8,あさまし,驚きあきれる\n9,いと,とても\n10,いにしへ,昔\n11,いづ,出る\n12,いづこ,どこ\n13,いづれ,どちら\n14,おはす,いらっしゃる\n15,おぼす,お思いになる\n16,のたまふ,おっしゃる\n17,侍り,ございます（丁寧語）\n18,やがて,すぐに・そのまま\n19,やうやう,だんだん\n20,めでたし,すばらしい\n21,かなし,いとおしい・かわいい\n22,かたし,難しい\n23,かぎりなし,この上ない\n24,けしき,様子・態度\n25,さま,様子\n26,さらば,そうならば\n27,さりとて,そうかといって\n28,しのぶ,がまんする・思い出す\n29,す,する\n30,ず,〜ない\n31,すべ,方法・手段\n32,ためし,例・手本\n33,つきづきし,ふさわしい\n34,つとめて,早朝\n35,つれづれ,退屈だ・所在ない\n36,としごろ,長年\n37,とて,〜といって\n38,ども,〜けれども\n39,なり,〜にいる・ある・〜である\n40,なんぢ,おまえ\n41,にあらず,〜ではない\n42,にはか,急に\n43,はなはだ,とても\n44,ひさし(久し),長い\n45,ふみ,手紙・文書\n46,む(ん),〜だろう・〜しよう\n47,よし,理由・方法\n48,よろづ,すべて・いろいろ\n49,ありがたし,めったにない\n50,いとほし,気の毒だ\n51,あな,ああ・あら\n52,あまた,たくさん\n53,あやなし,筋が通らない\n54,あし,悪い\n55,あり,存在する\n56,口惜し,残念だ\n57,けり,〜た（過去）\n58,ごとし,〜のようだ\n59,ことわり(理),道理\n60,かく,このように\n61,かかる,このような\n62,いはく(曰く),言うことには\n63,いとど,ますます\n64,おのれ,自分・お前\n65,おのづから,自然に・ひとりで\n66,おきな,おじいさん\n67,いかで,どうして・なんとかして\n68,いかなる,どういう\n69,いかに,なぜ・どのように\n70,いざ,さあ\n71,をかし,趣がある・風情がある\n72,あした,早朝・朝\n73,ゆゑ,〜のため・理由\n74,さま,様子\n75,かなし,かわいい\n76,ありがたし,めったにない\n77,うつくし,かわいい\n78,いと,とても\n79,けしき,様子・態度\n80,しのぶ,がまんする`;
+
+// ---- minimal CSS (mobile first) ----
+const S = {
+  page: { minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '16px', background: '#f7fafc', color: '#111827' },
+  container: { width: '100%', maxWidth: 420 },
+  header: { fontSize: 22, fontWeight: 800, marginBottom: 8 },
+  timer: { marginBottom: 12, fontSize: 14, color: '#374151' },
+  controlsRow: { display: 'flex', gap: 8, marginBottom: 12 },
+  input: { flex: 1, border: '1px solid #e5e7eb', borderRadius: 10, padding: '10px 12px', fontSize: 16 },
+  select: { border: '1px solid #e5e7eb', borderRadius: 10, padding: '10px 12px', fontSize: 16 },
+  card: { background: '#fff', borderRadius: 16, boxShadow: '0 8px 24px rgba(0,0,0,0.06)', padding: 16 },
+  counter: { fontSize: 12, color: '#6b7280', marginBottom: 8 },
+  question: { fontSize: 22, fontWeight: 700, marginBottom: 8 },
+  inputRow: { display: 'flex', gap: 8, alignItems: 'center' }, // 入力欄とボタンを横並びに
+  answerInput: { flex: 1, border: '1px solid #e5e7eb', borderRadius: 10, padding: '10px 12px', fontSize: 16 },
+  primaryBtn: { width: '120px', background: '#111827', color: '#fff', border: 0, borderRadius: 10, padding: '10px 12px', fontSize: 16, fontWeight: 700 }, // 固定幅で横幅統一
+  muted: { fontSize: 13, color: '#6b7280', marginTop: 8 },
+  list: { marginTop: 12, maxHeight: 180, overflow: 'auto', padding: 0, listStyle: 'none' },
+  li: (ok) => ({ padding: 12, borderRadius: 10, border: `1px solid ${ok ? '#86efac' : '#fca5a5'}`, background: ok ? '#ecfdf5' : '#fef2f2', marginBottom: 8 }),
+  footerCard: { textAlign: 'center', background: '#fff', borderRadius: 16, boxShadow: '0 8px 24px rgba(0,0,0,0.06)', padding: 16 },
+  footerBtnsCol: { display: 'flex', flexDirection: 'column', gap: 8 },
+  secBtn: { padding: '10px 12px', borderRadius: 10, border: '1px solid #e5e7eb', fontSize: 16, background: '#fff' },
+  sendBtn: (disabled) => ({ padding: '10px 12px', borderRadius: 10, fontSize: 16, fontWeight: 700, border: 0, color: '#fff', background: disabled ? '#86efac' : '#059669' }),
+  status: { fontSize: 13, color: '#374151' },
+  barWrap: { width: '100%', height: 8, background: '#e5e7eb', borderRadius: 999, overflow: 'hidden', margin: '4px 0 8px' },
+  bar: (p) => ({ width: `${p}%`, height: '100%', background: '#10b981' })
+};
 
 function parseCSV(text) {
-  return text.split(/\r?\n/).slice(1).map(line => line.split(',')).filter(c => c[1] && c[2]).map((c, i) => ({ no: c[0] || i + 1, q: c[1], a: c[2] }));
+  return text
+    .split(/\r?\n/)
+    .slice(1)
+    .map(line => line.split(','))
+    .filter(c => c[1] && c[2])
+    .map((c, i) => ({ no: c[0] || i + 1, q: c[1], a: c[2] }));
 }
 
 function normalize(s) {
   if (!s) return "";
-  return s.replace(/[\s　]/g, '').replace(/[、。,.．]/g, '').replace(/[ぁ-ん]/g, c => String.fromCharCode(c.charCodeAt(0) + 0x60)).toLowerCase();
+  return s
+    .replace(/[\s　]/g, '')
+    .replace(/[、。,.．]/g, '')
+    .replace(/[ぁ-ん]/g, c => String.fromCharCode(c.charCodeAt(0) + 0x60))
+    .toLowerCase();
 }
 
 function shuffle(arr) {
@@ -196,7 +153,7 @@ export default function App() {
         headers: { 'Content-Type': 'text/plain;charset=utf-8' },
         body: JSON.stringify(payload)
       });
-      setSendStatus('送信完了！（日本時間で送信）');
+      setSendStatus('送信完了！');
     } catch (e) {
       setSendStatus('送信失敗：' + e.message);
     } finally {
@@ -206,56 +163,70 @@ export default function App() {
 
   const mm = Math.floor(remainSec / 60).toString().padStart(2, '0');
   const ss = Math.floor(remainSec % 60).toString().padStart(2, '0');
+  const progress = finished || questions.length === 0 ? 100 : Math.floor((current / questions.length) * 100);
 
   return (
-    <div className="min-h-screen bg-gray-50 flex flex-col items-center p-6 text-gray-900">
-      <h1 className="text-2xl font-bold mb-2">古文単語テスト（日本時間対応）</h1>
-      <div className="mb-4 text-sm text-gray-600">タイマー：{mm}:{ss}</div>
-      <div className="w-full max-w-md mb-4 flex items-center gap-2">
-        <input className="flex-1 border rounded-lg p-2" placeholder="受験者名（任意）" value={studentName} onChange={e => setStudentName(e.target.value)} />
-        <select className="border rounded-lg p-2" value={durationSec} onChange={e => { const v = Number(e.target.value); setDurationSec(v); setRemainSec(v); }}>
-          <option value={3 * 60}>3分</option>
-          <option value={5 * 60}>5分</option>
-          <option value={10 * 60}>10分</option>
-        </select>
-      </div>
-      {!finished ? (
-        <div className="w-full max-w-md bg-white p-6 rounded-2xl shadow space-y-4">
-          <div className="text-sm text-gray-500">{current + 1} / {questions.length} 問</div>
-          <div className="text-xl font-semibold">{questions[current]?.q}</div>
-          <input type="text" value={input} onChange={e => setInput(e.target.value)} onKeyDown={e => e.key === 'Enter' && check()} placeholder="意味を入力" className="w-full border rounded-lg p-2" />
-          <button onClick={check} className="w-full bg-gray-900 text-white py-2 rounded-xl hover:bg-gray-800">答え合わせ</button>
-          <div className="text-sm text-gray-600">正解 {correct} / {current} 問</div>
-          {history.length > 0 && (
-            <div className="text-sm mt-4">
-              <div className="font-medium mb-1">直近の結果</div>
-              <ul className="space-y-1 max-h-40 overflow-auto">
-                {history.slice().reverse().map((h, i) => (
-                  <li key={i} className={`p-2 rounded-lg border ${h.ok ? 'bg-green-50 border-green-300' : 'bg-red-50 border-red-300'}`}>
-                    <div><span className="text-gray-500">問題：</span>{h.q}</div>
-                    <div><span className="text-gray-500">正解：</span>{h.expected}</div>
-                    <div><span className="text-gray-500">あなたの解答：</span>{h.given}</div>
-                    <div className={`font-semibold ${h.ok ? 'text-green-700' : 'text-red-700'}`}>{h.ok ? '正解' : '不正解'}</div>
-                  </li>
-                ))}
-              </ul>
+    <div style={S.page}>
+      <div style={S.container}>
+        <h1 style={S.header}>古文単語テスト</h1>
+        <div style={S.timer}>タイマー：{mm}:{ss}</div>
+        <div style={S.barWrap}><div style={S.bar(progress)} /></div>
+
+        <div style={S.controlsRow}>
+          <input style={S.input} placeholder="受験者名（任意）" value={studentName} onChange={e => setStudentName(e.target.value)} />
+          <select style={S.select} value={durationSec} onChange={e => { const v = Number(e.target.value); setDurationSec(v); setRemainSec(v); }}>
+            <option value={3 * 60}>3分</option>
+            <option value={5 * 60}>5分</option>
+            <option value={10 * 60}>10分</option>
+          </select>
+        </div>
+
+        {!finished ? (
+          <div style={S.card}>
+            <div style={S.counter}>{current + 1} / {questions.length} 問</div>
+            <div style={S.question}>{questions[current]?.q}</div>
+            <div style={S.inputRow}>
+              <input
+                type="text"
+                value={input}
+                onChange={e => setInput(e.target.value)}
+                onKeyDown={e => e.key === 'Enter' && check()}
+                placeholder="意味を入力"
+                style={S.answerInput}
+              />
+              <button onClick={check} style={S.primaryBtn}>答え合わせ</button>
             </div>
-          )}
-        </div>
-      ) : (
-        <div className="w-full max-w-md bg-white p-6 rounded-2xl shadow text-center">
-          <div className="text-xl font-bold mb-2">テスト終了！</div>
-          <div className="text-lg mb-4">正解数：{correct} / {questions.length} 問（{Math.round((correct / questions.length) * 100)}%）</div>
-          <div className="flex flex-col gap-2 items-stretch">
-            <button onClick={restart} className="px-4 py-2 rounded-xl bg-gray-900 text-white hover:bg-gray-800">もう一度（新しい20問）</button>
-            <button onClick={reviewWrong} className="px-4 py-2 rounded-xl bg-white border hover:bg-gray-100">誤答だけ復習</button>
-            <button onClick={sendToSheet} disabled={sending} className={`px-4 py-2 rounded-xl text-white ${sending ? 'bg-emerald-400 cursor-not-allowed' : 'bg-emerald-600 hover:bg-emerald-700'}`}>
-              {sending ? '送信中…' : 'スプレッドシートに送信（日本時間）'}
-            </button>
-            {sendStatus && <div className="text-sm text-gray-600">{sendStatus}</div>}
+            <div style={S.muted}>正解 {correct} / {current} 問</div>
+
+            {history.length > 0 && (
+              <div style={{ marginTop: 12 }}>
+                <div style={{ fontWeight: 600, marginBottom: 4 }}>直近の結果</div>
+                <ul style={S.list}>
+                  {history.slice().reverse().map((h, i) => (
+                    <li key={i} style={S.li(h.ok)}>
+                      <div><span style={{ color: '#6b7280' }}>問題：</span>{h.q}</div>
+                      <div><span style={{ color: '#6b7280' }}>正解：</span>{h.expected}</div>
+                      <div><span style={{ color: '#6b7280' }}>あなたの解答：</span>{h.given}</div>
+                      <div style={{ fontWeight: 700, color: h.ok ? '#047857' : '#b91c1c' }}>{h.ok ? '正解' : '不正解'}</div>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
           </div>
-        </div>
-      )}
+        ) : (
+          <div style={S.footerCard}>
+            <div style={{ fontSize: 20, fontWeight: 800, marginBottom: 8 }}>テスト終了！</div>
+            <div style={{ fontSize: 18, marginBottom: 12 }}>正解数：{correct} / {questions.length} 問（{Math.round((correct / questions.length) * 100)}%）</div>
+            <div style={S.footerBtnsCol}>
+              <button onClick={restart} style={{ ...S.primaryBtn, width: '100%' }}>もう一度（新しい20問）</button>
+              <button onClick={reviewWrong} style={S.secBtn}>間違えたものだけ復習</button>
+              <button onClick={sendToSheet} disabled={sending} style={{ ...S.sendBtn(sending) }}> {sending ? '送信中…' : '結果を送信'} </button>
+              {sendStatus && <div style={S.status}>{sendStatus}</div>}
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   );
 }

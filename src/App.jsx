@@ -9,23 +9,23 @@ const DEFAULT_CSV = `問題番号,古文単語,日本語訳\n1,をかし,趣が�
 
 // ---- minimal CSS (mobile first) ----
 const S = {
-  page: { minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '16px', background: '#f7fafc', color: '#111827' },
+  page: { minHeight: '100svh', display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '16px', background: '#f7fafc', color: '#111827' },
   container: { width: '100%', maxWidth: 420 },
   header: { fontSize: 22, fontWeight: 800, marginBottom: 8 },
   timer: { marginBottom: 12, fontSize: 14, color: '#374151' },
   controlsRow: { display: 'flex', gap: 8, marginBottom: 12 },
   input: { flex: 1, border: '1px solid #e5e7eb', borderRadius: 10, padding: '10px 12px', fontSize: 16 },
   select: { border: '1px solid #e5e7eb', borderRadius: 10, padding: '10px 12px', fontSize: 16 },
-  card: { background: '#fff', borderRadius: 16, boxShadow: '0 8px 24px rgba(0,0,0,0.06)', padding: 16 },
+  card: { background: '#fff', borderRadius: 16, boxShadow: '0 8px 24px rgba(0,0,0,0.06)', padding: 16, minHeight: 360 },
   counter: { fontSize: 12, color: '#6b7280', marginBottom: 8 },
   question: { fontSize: 22, fontWeight: 700, marginBottom: 8 },
   inputRow: { display: 'flex', gap: 8, alignItems: 'center' }, // 入力欄とボタンを横並びに
   answerInput: { flex: 1, border: '1px solid #e5e7eb', borderRadius: 10, padding: '10px 12px', fontSize: 16 },
   primaryBtn: { width: '120px', background: '#111827', color: '#fff', border: 0, borderRadius: 10, padding: '10px 12px', fontSize: 16, fontWeight: 700 }, // 固定幅で横幅統一
   muted: { fontSize: 13, color: '#6b7280', marginTop: 8 },
-  list: { marginTop: 12, maxHeight: 180, overflow: 'auto', padding: 0, listStyle: 'none' },
+  list: { marginTop: 12, maxHeight: 180, minHeight: 60, overflow: 'auto', padding: 0, listStyle: 'none' },
   li: (ok) => ({ padding: 12, borderRadius: 10, border: `1px solid ${ok ? '#86efac' : '#fca5a5'}`, background: ok ? '#ecfdf5' : '#fef2f2', marginBottom: 8 }),
-  footerCard: { textAlign: 'center', background: '#fff', borderRadius: 16, boxShadow: '0 8px 24px rgba(0,0,0,0.06)', padding: 16 },
+  footerCard: { textAlign: 'center', background: '#fff', borderRadius: 16, boxShadow: '0 8px 24px rgba(0,0,0,0.06)', padding: 16, minHeight: 360 },
   footerBtnsCol: { display: 'flex', flexDirection: 'column', gap: 8 },
   secBtn: { padding: '10px 12px', borderRadius: 10, border: '1px solid #e5e7eb', fontSize: 16, background: '#fff' },
   sendBtn: (disabled) => ({ padding: '10px 12px', borderRadius: 10, fontSize: 16, fontWeight: 700, border: 0, color: '#fff', background: disabled ? '#86efac' : '#059669' }),

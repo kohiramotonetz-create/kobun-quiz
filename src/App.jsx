@@ -82,6 +82,33 @@ export default function App() {
   const [remainSec, setRemainSec] = useState(DEFAULT_DURATION_SEC);
   const timerRef = useRef(null);
 
+  // ---- iPad最適化（B+C）: メディアクエリ & iOSテキスト自動拡大抑止 ----
+  useEffect(() => {
+    // viewport に maximum-scale=1 を付与
+    let meta = document.querySelector('meta[name="viewport"]');
+    if (!meta) {
+      meta = document.createElement('meta');
+      meta.setAttribute('name', 'viewport');
+      document.head.appendChild(meta);
+    }
+    meta.setAttribute('content', 'width=device-width, initial-scale=1, maximum-scale=1');
+
+    // メディアクエリ: iPad等(>=768px)でコンテナ幅を560pxに拡大 / iOS文字自動調整を固定
+    const styleEl = document.createElement('style');
+    styleEl.setAttribute('data-kobun', 'true');
+    styleEl.textContent = `
+      @media (min-width: 768px) {
+        [data-kobun-app] .kobun-container { max-width: 560px !important; }
+      }
+      body { -webkit-text-size-adjust: 100%; }
+    `;
+    document.head.appendChild(styleEl);
+
+    return () => {
+      if (styleEl.parentNode) styleEl.parentNode.removeChild(styleEl);
+    };
+  }, []);
+
   useEffect(() => {
     const parsed = parseCSV(DEFAULT_CSV);
     const size = Math.min(TEST_SIZE, parsed.length);
@@ -166,8 +193,8 @@ export default function App() {
   const progress = finished || questions.length === 0 ? 100 : Math.floor((current / questions.length) * 100);
 
   return (
-    <div style={S.page}>
-      <div style={S.container}>
+    <div style={S.page} data-kobun-app>
+      <div style={S.container} className="kobun-container">
         <h1 style={S.header}>古文単語テスト</h1>
         <div style={S.timer}>タイマー：{mm}:{ss}</div>
         <div style={S.barWrap}><div style={S.bar(progress)} /></div>

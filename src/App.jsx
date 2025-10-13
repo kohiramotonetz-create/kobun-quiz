@@ -216,7 +216,7 @@ const S = {
     position: "sticky",
     top: 0,
     background: "#f9fafb",
-    borderBottom: "1px solid "#e5e7eb"",
+    borderBottom: "1px solid #e5e7eb",
   },
   td: { padding: "8px 10px", borderBottom: "1px solid #f3f4f6" },
   badge: (ok) => ({

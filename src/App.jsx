@@ -1,16 +1,14 @@
 import React, { useEffect, useRef, useState } from "react";
-import kuromoji from "kuromoji";
 
 /**
- * 古文単語テスト（形態素解析対応・完全版）
+ * 古文単語テスト（送信機能あり・形態素解析なし）
  * - フェーズ: quiz → lastFeedback → summaryList → result
  * - 20問ランダム（非復元）/ ゆるい判定（部分一致）/ タイマー
  * - 送信: Apps Script（/exec）へ x-www-form-urlencoded で POST、擬似進捗→100% で完了
- * - 形態素解析: kuromoji.js で読みを取得し、漢字かなゆれを自動吸収
  * - iPad最適化 & 全幅対応
  */
 
-// あなたの /exec URL を貼る
+// あなたの /exec URL
 const SHEETS_URL =
   "https://script.google.com/macros/s/AKfycbzdh8p-5hceAPcJcixVKMQhgnHDZ8MjlCIEXYCbqXODJap-NqhsVfOZW7Y7PCx7z-7XKQ/exec";
 
@@ -97,6 +95,7 @@ const DEFAULT_CSV = `問題番号,古文単語,日本語訳
 79,けしき,様子・態度
 80,しのぶ,がまんする`;
 
+// ---- minimal CSS (mobile first, full-width) ----
 const S = {
   page: {
     minHeight: "100svh",
@@ -217,7 +216,7 @@ const S = {
     position: "sticky",
     top: 0,
     background: "#f9fafb",
-    borderBottom: "1px solid #e5e7eb",
+    borderBottom: "1px solid "#e5e7eb"",
   },
   td: { padding: "8px 10px", borderBottom: "1px solid #f3f4f6" },
   badge: (ok) => ({
@@ -232,6 +231,7 @@ const S = {
   }),
 };
 
+// ---- ユーティリティ ----
 function parseCSV(text) {
   return text
     .split(/\r?\n/)
@@ -241,16 +241,17 @@ function parseCSV(text) {
     .map((c, i) => ({ no: c[0] || i + 1, q: c[1], a: c[2] }));
 }
 
-// ベース整形：空白・句読点除去
 function stripPunctSpaces(s) {
   if (!s) return "";
   return s.replace(/[\s　]/g, "").replace(/[、。,.．]/g, "");
 }
-// カタカナ→ひらがな
 function kataToHira(s) {
   return s.replace(/[ァ-ン]/g, (c) =>
     String.fromCharCode(c.charCodeAt(0) - 0x60)
   );
+}
+function normalize(s) {
+  return stripPunctSpaces(kataToHira(s || "")).toLowerCase();
 }
 
 function shuffle(arr) {
@@ -288,10 +289,6 @@ export default function App() {
   const [sending, setSending] = useState(false);
   const [sendProgress, setSendProgress] = useState(0);
 
-  // 形態素解析
-  const [tokenizer, setTokenizer] = useState(null);
-  const [tokenizerReady, setTokenizerReady] = useState(false);
-
   // iOSズーム抑止 & 全幅メディアクエリ
   useEffect(() => {
     let meta = document.querySelector('meta[name="viewport"]');
@@ -318,20 +315,6 @@ export default function App() {
     };
   }, []);
 
-  // kuromoji 初期化（辞書は public/kuromoji/dict に配置）
-  useEffect(() => {
-    kuromoji.builder({ dicPath: "/kuromoji/dict/" }).build((err, tk) => {
-      if (err) {
-        console.error("kuromoji build error:", err);
-        setTokenizer(null);
-        setTokenizerReady(false);
-        return;
-      }
-      setTokenizer(tk);
-      setTokenizerReady(true);
-    });
-  }, []);
-
   // 初期読み込み（非復元抽選）
   useEffect(() => {
     const parsed = parseCSV(DEFAULT_CSV);
@@ -343,7 +326,6 @@ export default function App() {
   useEffect(() => {
     if (phase !== "quiz") return;
     if (remainSec <= 0) {
-      // 時間切れでも直近結果を優先：何か答えていれば lastFeedback、そうでなければ summaryList
       setPhase(history.length > 0 ? "lastFeedback" : "summaryList");
       return;
     }
@@ -351,38 +333,20 @@ export default function App() {
     return () => clearTimeout(timerRef.current);
   }, [remainSec, phase, history.length]);
 
-  // 読み取得（kuromoji）。未準備時はフォールバック。
-  function getReading(text) {
-    if (!text) return "";
-    if (!tokenizer) return stripPunctSpaces(text);
-    const tokens = tokenizer.tokenize(text);
-    const reading = tokens
-      .map((t) => t.reading || t.surface_form || "")
-      .join("");
-    return reading;
-  }
-  // 読みベースのノーマライズ：読み（カタカナ）→ひらがな→句読点/空白除去→小文字
-  function normalizeByReading(s) {
-    const readingKatakana = getReading(s); // "オマエ"
-    const readingHiragana = kataToHira(readingKatakana); // "おまえ"
-    return stripPunctSpaces(readingHiragana).toLowerCase();
-  }
-  // 正解テキストを分割して「読みノーマライズ」配列に
+  // 判定用
   const expectedListOf = (a) =>
-    a
-      ? a.split(/[・、,／/]/).map((t) => normalizeByReading(t)).filter(Boolean)
-      : [];
+    a ? a.split(/[・、,／/]/).map((t) => normalize(t)).filter(Boolean) : [];
 
   const check = () => {
     const q = questions[current];
     if (!q) return;
 
-    const expectedList = expectedListOf(q.a); // 読みノーマライズ済み
-    const user = normalizeByReading(input);   // 読みノーマライズ済み
+    const expectedList = expectedListOf(q.a);
+    const user = normalize(input);
 
     let isCorrect = false;
     if (user.length > 0) {
-      // ゆるい部分一致（仕様踏襲）
+      // ゆるい部分一致（従来仕様）
       isCorrect = expectedList.some(
         (e) => e.length > 0 && (user.includes(e) || e.includes(user))
       );
@@ -468,7 +432,7 @@ export default function App() {
         json = await res.json();
       } catch (e) {
         throw new Error("サーバからのJSONを解析できません");
-        }
+      }
       if (!res.ok || !json || json.ok !== true) {
         throw new Error(json && json.error ? json.error : "サーバがエラーを返しました");
       }
@@ -506,10 +470,9 @@ export default function App() {
         <div style={S.controlsRow}>
           <input
             style={S.input}
-            placeholder={tokenizerReady ? "受験者名（任意）" : "辞書ロード中…"}
+            placeholder="受験者名（任意）"
             value={studentName}
             onChange={(e) => setStudentName(e.target.value)}
-            disabled={!tokenizerReady}
           />
           <select
             style={S.select}
@@ -519,7 +482,6 @@ export default function App() {
               setDurationSec(v);
               setRemainSec(v);
             }}
-            disabled={!tokenizerReady}
           >
             <option value={3 * 60}>3分</option>
             <option value={5 * 60}>5分</option>
@@ -539,12 +501,11 @@ export default function App() {
                 type="text"
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && tokenizerReady && check()}
-                placeholder={tokenizerReady ? "意味を入力" : "辞書ロード中…"}
+                onKeyDown={(e) => e.key === "Enter" && check()}
+                placeholder="意味を入力"
                 style={S.answerInput}
-                disabled={!tokenizerReady}
               />
-              <button onClick={check} style={S.primaryBtn} disabled={!tokenizerReady}>
+              <button onClick={check} style={S.primaryBtn}>
                 答え合わせ
               </button>
             </div>
@@ -639,10 +600,17 @@ export default function App() {
             </div>
 
             <div style={{ ...S.footerBtnsCol, marginTop: 16 }}>
-              <button onClick={reviewWrong} 
-              style={{ ...S.secBtn, background: "#3B82F6", color: "#FFFFFF", border: 0, fontWeight: 700 }}
-              >間違いだけ復習</button>
-              <button onClick={() => setPhase("result")} style={{ ...S.primaryBtn, width: "100%" }}>
+              {/* 青背景＋白文字（指定どおり） */}
+              <button
+                onClick={reviewWrong}
+                style={{ ...S.secBtn, background: "#3B82F6", color: "#FFFFFF", border: 0, fontWeight: 700 }}
+              >
+                間違いだけ復習
+              </button>
+              <button
+                onClick={() => setPhase("result")}
+                style={{ ...S.primaryBtn, width: "100%" }}
+              >
                 結果へ進む
               </button>
             </div>
@@ -660,15 +628,25 @@ export default function App() {
             </div>
 
             <div style={S.footerBtnsCol}>
-              <button onClick={restart} 
-              style={{ ...S.primaryBtn, width: "100%", background: "#3B82F6", color: "#FFFFFF" }}
+              {/* 青背景＋白文字（指定どおり） */}
+              <button
+                onClick={restart}
+                style={{ ...S.primaryBtn, width: "100%", background: "#3B82F6", color: "#FFFFFF" }}
               >
                 もう一度（新しい20問）
               </button>
-              <button onClick={reviewWrong} 
-              style={{ ...S.secBtn, background: "#3B82F6", color: "#FFFFFF", border: 0, fontWeight: 700 }}
-              >間違いだけ復習</button>
-              <button onClick={sendToSheet} disabled={sending} style={{ ...S.sendBtn(sending) }}>
+              <button
+                onClick={reviewWrong}
+                style={{ ...S.secBtn, background: "#3B82F6", color: "#FFFFFF", border: 0, fontWeight: 700 }}
+              >
+                間違いだけ復習
+              </button>
+
+              <button
+                onClick={sendToSheet}
+                disabled={sending}
+                style={{ ...S.sendBtn(sending) }}
+              >
                 {sending ? "送信中…" : "結果を送信"}
               </button>
 
@@ -686,9 +664,9 @@ export default function App() {
   );
 }
 
-// --- 開発時の簡易テスト ---
+// --- 簡易テスト ---
 (function devTests() {
-  // ここでは tokenizer 未準備のため読みは確認しない（実ランで確認）
   console.assert(stripPunctSpaces(" あ 。,。") === "あ", "strip/句読点");
   console.assert(kataToHira("オマエ") === "おまえ", "カタ→ひら");
+  console.assert(normalize("  ア  ") === "あ", "normalize basic");
 })();

@@ -632,14 +632,9 @@ export default function App() {
             </div>
 
             <div style={{ ...S.footerBtnsCol, marginTop: 16 }}>
-              {/* 変更①：間違いだけ復習（青背景＋白文字） */}
-              <button
-                onClick={reviewWrong}
-                style={{ ...S.secBtn, background: "#3B82F6", color: "#FFFFFF", border: 0, fontWeight: 700 }}
-              >
+              <button onClick={reviewWrong} style={S.secBtn}>
                 間違いだけ復習
               </button>
-
               <button
                 onClick={() => setPhase("result")}
                 style={{ ...S.primaryBtn, width: "100%" }}
@@ -664,22 +659,15 @@ export default function App() {
             </div>
 
             <div style={S.footerBtnsCol}>
-              {/* 変更②：もう一度（青背景＋白文字） */}
               <button
                 onClick={restart}
-                style={{ ...S.primaryBtn, width: "100%", background: "#3B82F6", color: "#FFFFFF" }}
+                style={{ ...S.primaryBtn, width: "100%" }}
               >
                 もう一度（新しい20問）
               </button>
-
-              {/* 変更③：間違いだけ復習（青背景＋白文字） */}
-              <button
-                onClick={reviewWrong}
-                style={{ ...S.secBtn, background: "#3B82F6", color: "#FFFFFF", border: 0, fontWeight: 700 }}
-              >
+              <button onClick={reviewWrong} style={S.secBtn}>
                 間違いだけ復習
               </button>
-
               <button
                 onClick={sendToSheet}
                 disabled={sending}

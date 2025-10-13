@@ -1,16 +1,14 @@
 import React, { useEffect, useRef, useState } from "react";
-import kuromoji from "kuromoji";
 
 /**
- * 古文単語テスト（形態素解析対応・完全版）
+ * 古文単語テスト（全面リファクタ版）
  * - フェーズ: quiz → lastFeedback → summaryList → result
  * - 20問ランダム（非復元）/ ゆるい判定（部分一致）/ タイマー
  * - 送信: Apps Script（/exec）へ x-www-form-urlencoded で POST、擬似進捗→100% で完了
- * - 形態素解析: kuromoji.js で読みを取得し、漢字かなゆれを自動吸収
  * - iPad最適化 & 全幅対応
  */
 
-// あなたの /exec URL を貼る
+// ← あなたの /exec URL を貼る
 const SHEETS_URL =
   "https://script.google.com/macros/s/AKfycbzdh8p-5hceAPcJcixVKMQhgnHDZ8MjlCIEXYCbqXODJap-NqhsVfOZW7Y7PCx7z-7XKQ/exec";
 
@@ -97,6 +95,7 @@ const DEFAULT_CSV = `問題番号,古文単語,日本語訳
 79,けしき,様子・態度
 80,しのぶ,がまんする`;
 
+// ---- minimal CSS (mobile first, full-width) ----
 const S = {
   page: {
     minHeight: "100svh",
@@ -241,16 +240,17 @@ function parseCSV(text) {
     .map((c, i) => ({ no: c[0] || i + 1, q: c[1], a: c[2] }));
 }
 
-// ベース整形：空白・句読点除去
-function stripPunctSpaces(s) {
+// カタカナ→ひらがな、空白・句読点除去、英数は小文字化
+function normalize(s) {
   if (!s) return "";
-  return s.replace(/[\s　]/g, "").replace(/[、。,.．]/g, "");
-}
-// カタカナ→ひらがな
-function kataToHira(s) {
-  return s.replace(/[ァ-ン]/g, (c) =>
-    String.fromCharCode(c.charCodeAt(0) - 0x60)
-  );
+  const z = s
+    .replace(/[\s　]/g, "")
+    .replace(/[、。,.．]/g, "")
+    .replace(/[ァ-ン]/g, (c) =>
+      String.fromCharCode(c.charCodeAt(0) - 0x60)
+    )
+    .toLowerCase();
+  return z;
 }
 
 function shuffle(arr) {
@@ -288,10 +288,6 @@ export default function App() {
   const [sending, setSending] = useState(false);
   const [sendProgress, setSendProgress] = useState(0);
 
-  // 形態素解析
-  const [tokenizer, setTokenizer] = useState(null);
-  const [tokenizerReady, setTokenizerReady] = useState(false);
-
   // iOSズーム抑止 & 全幅メディアクエリ
   useEffect(() => {
     let meta = document.querySelector('meta[name="viewport"]');
@@ -318,20 +314,6 @@ export default function App() {
     };
   }, []);
 
-  // kuromoji 初期化（辞書は public/kuromoji/dict に配置）
-  useEffect(() => {
-    kuromoji.builder({ dicPath: "/kuromoji/dict/" }).build((err, tk) => {
-      if (err) {
-        console.error("kuromoji build error:", err);
-        setTokenizer(null);
-        setTokenizerReady(false);
-        return;
-      }
-      setTokenizer(tk);
-      setTokenizerReady(true);
-    });
-  }, []);
-
   // 初期読み込み（非復元抽選）
   useEffect(() => {
     const parsed = parseCSV(DEFAULT_CSV);
@@ -343,7 +325,8 @@ export default function App() {
   useEffect(() => {
     if (phase !== "quiz") return;
     if (remainSec <= 0) {
-      // 時間切れでも直近結果を優先：何か答えていれば lastFeedback、そうでなければ summaryList
+      // 時間切れでも最終の結果表示を優先したい：直近問題の表示へ
+      // もしまだ履歴が無ければ、そのまま summaryList へ
       setPhase(history.length > 0 ? "lastFeedback" : "summaryList");
       return;
     }
@@ -351,42 +334,19 @@ export default function App() {
     return () => clearTimeout(timerRef.current);
   }, [remainSec, phase, history.length]);
 
-  // 読み取得（kuromoji）。未準備時はフォールバック。
-  function getReading(text) {
-    if (!text) return "";
-    if (!tokenizer) return stripPunctSpaces(text);
-    const tokens = tokenizer.tokenize(text);
-    const reading = tokens
-      .map((t) => t.reading || t.surface_form || "")
-      .join("");
-    return reading;
-  }
-  // 読みベースのノーマライズ：読み（カタカナ）→ひらがな→句読点/空白除去→小文字
-  function normalizeByReading(s) {
-    const readingKatakana = getReading(s); // "オマエ"
-    const readingHiragana = kataToHira(readingKatakana); // "おまえ"
-    return stripPunctSpaces(readingHiragana).toLowerCase();
-  }
-  // 正解テキストを分割して「読みノーマライズ」配列に
   const expectedListOf = (a) =>
-    a
-      ? a.split(/[・、,／/]/).map((t) => normalizeByReading(t)).filter(Boolean)
-      : [];
+    normalize(a).split(/[・、,／/]/).filter(Boolean);
 
   const check = () => {
     const q = questions[current];
     if (!q) return;
-
-    const expectedList = expectedListOf(q.a); // 読みノーマライズ済み
-    const user = normalizeByReading(input);   // 読みノーマライズ済み
-
+    const expectedList = expectedListOf(q.a);
+    const user = normalize(input);
     let isCorrect = false;
-    if (user.length > 0) {
-      // ゆるい部分一致（仕様踏襲）
+    if (user.length > 0)
       isCorrect = expectedList.some(
         (e) => e.length > 0 && (user.includes(e) || e.includes(user))
       );
-    }
 
     if (isCorrect) setCorrect((c) => c + 1);
     const rec = { no: q.no, q: q.q, expected: q.a, given: input, ok: isCorrect };
@@ -394,14 +354,17 @@ export default function App() {
 
     const isLast = current + 1 >= questions.length;
     if (isLast) {
-      setPhase("lastFeedback"); // 最終問題の結果を必ず表示
+      // 最終問題の直後は必ず「lastFeedback」を表示
+      setPhase("lastFeedback");
     } else {
       setCurrent((c) => c + 1);
       setInput("");
     }
   };
 
-  const goSummaryFromLastFeedback = () => setPhase("summaryList");
+  const goSummaryFromLastFeedback = () => {
+    setPhase("summaryList");
+  };
 
   const restart = () => {
     const parsed = parseCSV(DEFAULT_CSV);
@@ -468,7 +431,7 @@ export default function App() {
         json = await res.json();
       } catch (e) {
         throw new Error("サーバからのJSONを解析できません");
-        }
+      }
       if (!res.ok || !json || json.ok !== true) {
         throw new Error(json && json.error ? json.error : "サーバがエラーを返しました");
       }
@@ -491,6 +454,7 @@ export default function App() {
       ? 100
       : Math.floor((current / questions.length) * 100);
 
+  // 最終問題のレコード（lastFeedbackで表示）
   const lastRec = history[history.length - 1];
 
   return (
@@ -498,18 +462,21 @@ export default function App() {
       <div style={S.container} className="kobun-container">
         <h1 style={S.header}>古文単語テスト</h1>
 
-        {/* 共通ヘッダー */}
-        <div style={S.timer}>タイマー：{mm}:{ss}</div>
-        <div style={S.barWrap}><div style={S.bar(progress)} /></div>
+        {/* 共通ヘッダー（quiz中のみタイマー進行） */}
+        <div style={S.timer}>
+          タイマー：{mm}:{ss}
+        </div>
+        <div style={S.barWrap}>
+          <div style={S.bar(progress)} />
+        </div>
 
-        {/* ヘッダー操作 */}
+        {/* ヘッダー操作（持ち時間・氏名） */}
         <div style={S.controlsRow}>
           <input
             style={S.input}
-            placeholder={tokenizerReady ? "受験者名（任意）" : "辞書ロード中…"}
+            placeholder="受験者名（任意）"
             value={studentName}
             onChange={(e) => setStudentName(e.target.value)}
-            disabled={!tokenizerReady}
           />
           <select
             style={S.select}
@@ -519,7 +486,6 @@ export default function App() {
               setDurationSec(v);
               setRemainSec(v);
             }}
-            disabled={!tokenizerReady}
           >
             <option value={3 * 60}>3分</option>
             <option value={5 * 60}>5分</option>
@@ -539,12 +505,11 @@ export default function App() {
                 type="text"
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && tokenizerReady && check()}
-                placeholder={tokenizerReady ? "意味を入力" : "辞書ロード中…"}
+                onKeyDown={(e) => e.key === "Enter" && check()}
+                placeholder="意味を入力"
                 style={S.answerInput}
-                disabled={!tokenizerReady}
               />
-              <button onClick={check} style={S.primaryBtn} disabled={!tokenizerReady}>
+              <button onClick={check} style={S.primaryBtn}>
                 答え合わせ
               </button>
             </div>
@@ -554,17 +519,35 @@ export default function App() {
 
             {history.length > 0 && (
               <div style={{ marginTop: 12 }}>
-                <div style={{ fontWeight: 600, marginBottom: 4 }}>直近の結果</div>
+                <div style={{ fontWeight: 600, marginBottom: 4 }}>
+                  直近の結果
+                </div>
                 <ul style={S.list}>
                   {history
-                    .slice(-5)
+                    .slice(-5) // 直近だけ簡易表示
                     .reverse()
                     .map((h, i) => (
                       <li key={i} style={S.li(h.ok)}>
-                        <div><span style={{ color: "#6b7280" }}>問題：</span>{h.q}</div>
-                        <div><span style={{ color: "#6b7280" }}>正解：</span>{h.expected}</div>
-                        <div><span style={{ color: "#6b7280" }}>あなたの解答：</span>{h.given}</div>
-                        <div style={{ fontWeight: 700, color: h.ok ? "#047857" : "#b91c1c" }}>
+                        <div>
+                          <span style={{ color: "#6b7280" }}>問題：</span>
+                          {h.q}
+                        </div>
+                        <div>
+                          <span style={{ color: "#6b7280" }}>正解：</span>
+                          {h.expected}
+                        </div>
+                        <div>
+                          <span style={{ color: "#6b7280" }}>
+                            あなたの解答：
+                          </span>
+                          {h.given}
+                        </div>
+                        <div
+                          style={{
+                            fontWeight: 700,
+                            color: h.ok ? "#047857" : "#b91c1c",
+                          }}
+                        >
                           {h.ok ? "正解" : "不正解"}
                         </div>
                       </li>
@@ -583,23 +566,31 @@ export default function App() {
             {lastRec ? (
               <div>
                 <div style={{ marginBottom: 8 }}>
-                  <span style={{ color: "#6b7280" }}>問題：</span>{lastRec.q}
+                  <span style={{ color: "#6b7280" }}>問題：</span>
+                  {lastRec.q}
                 </div>
                 <div style={{ marginBottom: 8 }}>
-                  <span style={{ color: "#6b7280" }}>あなたの解答：</span>{lastRec.given}
+                  <span style={{ color: "#6b7280" }}>あなたの解答：</span>
+                  {lastRec.given}
                 </div>
                 <div style={{ marginBottom: 8 }}>
-                  <span style={{ color: "#6b7280" }}>正解：</span>{lastRec.expected}
+                  <span style={{ color: "#6b7280" }}>正解：</span>
+                  {lastRec.expected}
                 </div>
                 <div style={{ marginTop: 4 }}>
-                  <span style={S.badge(lastRec.ok)}>{lastRec.ok ? "正解" : "不正解"}</span>
+                  <span style={S.badge(lastRec.ok)}>
+                    {lastRec.ok ? "正解" : "不正解"}
+                  </span>
                 </div>
               </div>
             ) : (
               <div>データが見つかりません。</div>
             )}
             <div style={{ marginTop: 16 }}>
-              <button onClick={() => setPhase("summaryList")} style={{ ...S.primaryBtn, width: "100%" }}>
+              <button
+                onClick={goSummaryFromLastFeedback}
+                style={{ ...S.primaryBtn, width: "100%" }}
+              >
                 全体の結果を見る
               </button>
             </div>
@@ -630,7 +621,9 @@ export default function App() {
                       <td style={S.td}>{h.given}</td>
                       <td style={S.td}>{h.expected}</td>
                       <td style={S.td}>
-                        <span style={S.badge(h.ok)}>{h.ok ? "○" : "×"}</span>
+                        <span style={S.badge(h.ok)}>
+                          {h.ok ? "○" : "×"}
+                        </span>
                       </td>
                     </tr>
                   ))}
@@ -639,8 +632,13 @@ export default function App() {
             </div>
 
             <div style={{ ...S.footerBtnsCol, marginTop: 16 }}>
-              <button onClick={reviewWrong} style={S.secBtn}>間違いだけ復習</button>
-              <button onClick={() => setPhase("result")} style={{ ...S.primaryBtn, width: "100%" }}>
+              <button onClick={reviewWrong} style={S.secBtn}>
+                間違いだけ復習
+              </button>
+              <button
+                onClick={() => setPhase("result")}
+                style={{ ...S.primaryBtn, width: "100%" }}
+              >
                 結果へ進む
               </button>
             </div>
@@ -649,23 +647,36 @@ export default function App() {
 
         {phase === "result" && (
           <div style={S.footerCard}>
-            <div style={{ fontSize: 20, fontWeight: 800, marginBottom: 8 }}>テスト終了！</div>
+            <div style={{ fontSize: 20, fontWeight: 800, marginBottom: 8 }}>
+              テスト終了！
+            </div>
             <div style={{ fontSize: 18, marginBottom: 12 }}>
-              正解数：{correct} / {questions.length} 問（{Math.round((correct / questions.length) * 100)}%）
+              正解数：{correct} / {questions.length} 問（
+              {Math.round((correct / questions.length) * 100)}%）
             </div>
             <div style={{ fontSize: 14, color: "#6b7280", marginBottom: 16 }}>
               所要時間：{mm}:{ss}
             </div>
 
             <div style={S.footerBtnsCol}>
-              <button onClick={restart} style={{ ...S.primaryBtn, width: "100%" }}>
+              <button
+                onClick={restart}
+                style={{ ...S.primaryBtn, width: "100%" }}
+              >
                 もう一度（新しい20問）
               </button>
-              <button onClick={reviewWrong} style={S.secBtn}>間違いだけ復習</button>
-              <button onClick={sendToSheet} disabled={sending} style={{ ...S.sendBtn(sending) }}>
+              <button onClick={reviewWrong} style={S.secBtn}>
+                間違いだけ復習
+              </button>
+              <button
+                onClick={sendToSheet}
+                disabled={sending}
+                style={{ ...S.sendBtn(sending) }}
+              >
                 {sending ? "送信中…" : "結果を送信"}
               </button>
 
+              {/* 進捗％とステータス */}
               {(sending || sendProgress > 0 || sendStatus) && (
                 <div style={{ marginTop: 8 }}>
                   <div style={S.status}>送信進捗：{sendProgress}%</div>
@@ -680,9 +691,23 @@ export default function App() {
   );
 }
 
-// --- 開発時の簡易テスト ---
+// --- 簡易テスト ---
 (function devTests() {
-  // ここでは tokenizer 未準備のため読みは確認しない（実ランで確認）
-  console.assert(stripPunctSpaces(" あ 。,。") === "あ", "strip/句読点");
-  console.assert(kataToHira("オマエ") === "おまえ", "カタ→ひら");
+  // normalize: カタカナ→ひらがな, 空白/句読点除去
+  console.assert(normalize("  ア  ") === "あ", "normalize: カナ→ひらがな/空白除去");
+  console.assert(normalize("あ 。,。") === "あ", "normalize: 句読点除去");
+
+  // 複数意味の一部一致
+  const expectedList = "趣がある・風情がある";
+  const user1 = "趣がある";
+  const user2 = "風情";
+  const list = expectedList.split(/[・、,／/]/).filter(Boolean).map((t) => normalize(t));
+  console.assert(
+    list.some((e) => normalize(user1).includes(e) || e.includes(normalize(user1))),
+    "partial match 1"
+  );
+  console.assert(
+    list.some((e) => normalize(user2).includes(e) || e.includes(normalize(user2))),
+    "partial match 2"
+  );
 })();

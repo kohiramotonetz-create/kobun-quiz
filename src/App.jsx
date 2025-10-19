@@ -22,6 +22,7 @@ const SKIP_HEADER = true; // ← 先頭行がヘッダーの CSV のとき true
 
 // あなたの GAS /exec URL は .env から与える（例：VITE_GAS_URL="https://script.google.com/.../exec"）
 const GAS_URL = import.meta.env.VITE_GAS_URL;
+const APP_NAME = import.meta.env.VITE_APP_NAME;
 
 // ---- minimal CSS (mobile first, full-width) ----
 const S = {
@@ -384,6 +385,7 @@ export default function App() {
     const timerId = setInterval(tick, 200);
 
     const payload = {
+      subject: APP_NAME,      //← 追加：タブ名（= VITE_APP_NAME）
       timestamp: toJSTISOString(new Date()),
       user_name: studentName || "",
       total: questions.length,

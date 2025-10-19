@@ -1,99 +1,27 @@
 import React, { useEffect, useRef, useState } from "react";
+import wordsCsv from "./words.csv?raw"; // ① src/words.csv から読み込み（Vite想定）
 
 /**
  * 古文単語テスト（送信機能あり・形態素解析なし）
- * - フェーズ: quiz → lastFeedback → summaryList → result
- * - 20問ランダム（非復元）/ ゆるい判定（部分一致）/ タイマー
- * - 送信: Apps Script（/exec）へ x-www-form-urlencoded で POST、擬似進捗→100% で完了
- * - iPad最適化 & 全幅対応
+ * 変更点：
+ *  - ① 問題データを src/words.csv から読み込み
+ *  - ② 結果送信を "x-www-form-urlencoded" + no-cors（GASの /exec）方式に変更
+ *
+ * CSV 期待フォーマット（例）：
+ *   問題番号,古文単語,日本語訳
+ *   1,をかし,趣がある・風情がある
+ *   2,いみじ,とても・すばらしい
+ *   ...
+ * 先頭行にヘッダーがある場合は SKIP_HEADER=true にしてください。
  */
 
-// あなたの /exec URL
-const SHEETS_URL =
-  "https://script.google.com/macros/s/AKfycbzdh8p-5hceAPcJcixVKMQhgnHDZ8MjlCIEXYCbqXODJap-NqhsVfOZW7Y7PCx7z-7XKQ/exec";
+// ========= 設定 =========
+const TEST_SIZE = 20;
+const DEFAULT_DURATION_SEC = 5 * 60;
+const SKIP_HEADER = true; // ← 先頭行がヘッダーの CSV のとき true
 
-// 80語（必要に応じて差し替え可）
-const DEFAULT_CSV = `問題番号,古文単語,日本語訳
-1,をかし,趣がある・風情がある
-2,いみじ,とても・すばらしい
-3,あはれ,しみじみとした情趣がある・しみじみ
-4,あやし,不思議だ・身分が低い
-5,ありがたし,めったにない
-6,うつくし,かわいい
-7,うし(憂し),つらい
-8,あさまし,驚きあきれる
-9,いと,とても
-10,いにしへ,昔
-11,いづ,出る
-12,いづこ,どこ
-13,いづれ,どちら
-14,おはす,いらっしゃる
-15,おぼす,お思いになる
-16,のたまふ,おっしゃる
-17,侍り,ございます（丁寧語）
-18,やがて,すぐに・そのまま
-19,やうやう,だんだん
-20,めでたし,すばらしい
-21,かなし,いとおしい・かわいい
-22,かたし,難しい
-23,かぎりなし,この上ない
-24,けしき,様子・態度
-25,さま,様子
-26,さらば,そうならば
-27,さりとて,そうかといって
-28,しのぶ,がまんする・思い出す
-29,す,する
-30,ず,〜ない
-31,すべ,方法・手段
-32,ためし,例・手本
-33,つきづきし,ふさわしい
-34,つとめて,早朝
-35,つれづれ,退屈だ・所在ない
-36,としごろ,長年
-37,とて,〜といって
-38,ども,〜けれども
-39,なり,〜にいる・ある・〜である
-40,なんぢ,おまえ
-41,にあらず,〜ではない
-42,にはか,急に
-43,はなはだ,とても
-44,ひさし(久し),長い
-45,ふみ,手紙・文書
-46,む(ん),〜だろう・〜しよう
-47,よし,理由・方法
-48,よろづ,すべて・いろいろ
-49,ありがたし,めったにない
-50,いとほし,気の毒だ
-51,あな,ああ・あら
-52,あまた,たくさん
-53,あやなし,筋が通らない
-54,あし,悪い
-55,あり,存在する
-56,口惜し,残念だ
-57,けり,〜た（過去）
-58,ごとし,〜のようだ
-59,ことわり(理),道理
-60,かく,このように
-61,かかる,このような
-62,いはく(曰く),言うことには
-63,いとど,ますます
-64,おのれ,自分・お前
-65,おのづから,自然に・ひとりで
-66,おきな,おじいさん
-67,いかで,どうして・なんとかして
-68,いかなる,どういう
-69,いかに,なぜ・どのように
-70,いざ,さあ
-71,をかし,趣がある・風情がある
-72,あした,早朝・朝
-73,ゆゑ,〜のため・理由
-74,さま,様子
-75,かなし,かわいい
-76,ありがたし,めったにない
-77,うつくし,かわいい
-78,いと,とても
-79,けしき,様子・態度
-80,しのぶ,がまんする`;
+// あなたの GAS /exec URL は .env から与える（例：VITE_GAS_URL="https://script.google.com/.../exec"）
+const GAS_URL = import.meta.env.VITE_GAS_URL;
 
 // ---- minimal CSS (mobile first, full-width) ----
 const S = {
@@ -231,14 +159,34 @@ const S = {
   }),
 };
 
-// ---- ユーティリティ ----
-function parseCSV(text) {
-  return text
-    .split(/\r?\n/)
-    .slice(1)
-    .map((line) => line.split(","))
-    .filter((c) => c[1] && c[2])
-    .map((c, i) => ({ no: c[0] || i + 1, q: c[1], a: c[2] }));
+// ========= ユーティリティ =========
+// （引用符対応の簡易CSVパーサ）
+function parseCsvRaw(csvText) {
+  const rows = [];
+  let i = 0, field = "", row = [], inQuotes = false;
+  const pushField = () => { row.push(field); field = ""; };
+  const pushRow = () => { rows.push(row); row = []; };
+
+  while (i < csvText.length) {
+    const c = csvText[i];
+    if (inQuotes) {
+      if (c === '"') {
+        if (csvText[i + 1] === '"') { field += '"'; i++; }
+        else inQuotes = false;
+      } else field += c;
+    } else {
+      if (c === '"') inQuotes = true;
+      else if (c === ",") pushField();
+      else if (c === "\n" || c === "\r") {
+        if (field !== "" || row.length > 0) pushField();
+        if (row.length) pushRow();
+        if (c === "\r" && csvText[i + 1] === "\n") i++;
+      } else field += c;
+    }
+    i++;
+  }
+  if (field !== "" || row.length > 0) { pushField(); pushRow(); }
+  return rows;
 }
 
 function stripPunctSpaces(s) {
@@ -268,12 +216,9 @@ function toJSTISOString(date) {
   return jst.toISOString().replace("T", " ").substring(0, 19);
 }
 
-const TEST_SIZE = 20;
-const DEFAULT_DURATION_SEC = 5 * 60;
-
 export default function App() {
   const [phase, setPhase] = useState("quiz"); // quiz | lastFeedback | summaryList | result
-  const [questions, setQuestions] = useState([]);
+  const [questions, setQuestions] = useState([]); // { no, q, a }
   const [current, setCurrent] = useState(0);
   const [input, setInput] = useState("");
   const [correct, setCorrect] = useState(0);
@@ -315,14 +260,27 @@ export default function App() {
     };
   }, []);
 
-  // 初期読み込み（非復元抽選）
+  // ① 初期読み込み：CSV からロード（非復元抽選）
   useEffect(() => {
-    const parsed = parseCSV(DEFAULT_CSV);
-    const size = Math.min(TEST_SIZE, parsed.length);
-    setQuestions(shuffle(parsed).slice(0, size));
+    try {
+      let rows = parseCsvRaw(wordsCsv);
+      if (SKIP_HEADER && rows.length) rows = rows.slice(1);
+      // 期待列順： [問題番号, 古文単語, 日本語訳]
+      const parsed = rows
+        .filter((r) => r.length >= 3 && r[1] && r[2])
+        .map((r, i) => ({
+          no: r[0] || String(i + 1),
+          q: String(r[1]).trim(),
+          a: String(r[2]).trim(),
+        }));
+      const size = Math.min(TEST_SIZE, parsed.length);
+      setQuestions(shuffle(parsed).slice(0, size));
+    } catch (e) {
+      console.error("CSV 読み込みエラー:", e);
+    }
   }, []);
 
-  // タイマー（quiz 中のみ動作）
+  // タイマー（quiz 中のみ）
   useEffect(() => {
     if (phase !== "quiz") return;
     if (remainSec <= 0) {
@@ -358,7 +316,7 @@ export default function App() {
 
     const isLast = current + 1 >= questions.length;
     if (isLast) {
-      setPhase("lastFeedback"); // 最終問題の結果を必ず表示
+      setPhase("lastFeedback");
     } else {
       setCurrent((c) => c + 1);
       setInput("");
@@ -368,9 +326,21 @@ export default function App() {
   const goSummaryFromLastFeedback = () => setPhase("summaryList");
 
   const restart = () => {
-    const parsed = parseCSV(DEFAULT_CSV);
-    const size = Math.min(TEST_SIZE, parsed.length);
-    setQuestions(shuffle(parsed).slice(0, size));
+    try {
+      let rows = parseCsvRaw(wordsCsv);
+      if (SKIP_HEADER && rows.length) rows = rows.slice(1);
+      const parsed = rows
+        .filter((r) => r.length >= 3 && r[1] && r[2])
+        .map((r, i) => ({
+          no: r[0] || String(i + 1),
+          q: String(r[1]).trim(),
+          a: String(r[2]).trim(),
+        }));
+      const size = Math.min(TEST_SIZE, parsed.length);
+      setQuestions(shuffle(parsed).slice(0, size));
+    } catch (e) {
+      console.error(e);
+    }
     setCurrent(0);
     setInput("");
     setCorrect(0);
@@ -393,14 +363,19 @@ export default function App() {
     setPhase("quiz");
   };
 
-  // 送信（プリフライト回避・読めるCORS）＋擬似進捗
+  // ② 送信（x-www-form-urlencoded + no-cors）＋擬似進捗
   const sendToSheet = async () => {
     if (sending) return;
+    if (!GAS_URL) {
+      setSendStatus("VITE_GAS_URL が設定されていません");
+      return;
+    }
+
     setSending(true);
     setSendStatus("送信中...");
     setSendProgress(0);
 
-    // 擬似プログレス：0→90% を一定間隔で進行、応答で100%
+    // 擬似プログレス：0→90% を一定間隔で進行、応答は読まないため最後に100%
     let p = 0;
     const tick = () => {
       p = Math.min(p + 5, 90);
@@ -410,41 +385,35 @@ export default function App() {
 
     const payload = {
       timestamp: toJSTISOString(new Date()),
-      name: studentName || "",
+      user_name: studentName || "",
       total: questions.length,
       correct,
-      percent: Math.round((correct / questions.length) * 100),
+      percent: Math.round((correct / Math.max(questions.length, 1)) * 100),
       history,
+      device_info: navigator.userAgent,
     };
 
     try {
       const body = new URLSearchParams({ payload: JSON.stringify(payload) });
-      const res = await fetch(SHEETS_URL, {
+      // 応答は読まず、CORS を避ける
+      fetch(GAS_URL, {
         method: "POST",
         headers: {
           "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8",
         },
         body,
+        mode: "no-cors",
+        keepalive: true,
       });
-
-      let json = null;
-      try {
-        json = await res.json();
-      } catch (e) {
-        throw new Error("サーバからのJSONを解析できません");
-      }
-      if (!res.ok || !json || json.ok !== true) {
-        throw new Error(json && json.error ? json.error : "サーバがエラーを返しました");
-      }
 
       clearInterval(timerId);
       setSendProgress(100);
-      setSendStatus("送信完了！");
+      setSendStatus("送信完了！（no-corsのため応答は未確認）");
     } catch (e) {
       clearInterval(timerId);
       setSendStatus("送信失敗：" + e.message);
     } finally {
-      setTimeout(() => setSending(false), 800);
+      setTimeout(() => setSending(false), 600);
     }
   };
 
@@ -570,7 +539,7 @@ export default function App() {
         {phase === "summaryList" && (
           <div style={S.card}>
             <div style={{ fontSize: 18, fontWeight: 800, marginBottom: 8 }}>
-              全20問の一覧
+              全{questions.length}問の一覧
             </div>
             <div style={{ overflow: "auto", maxHeight: 360 }}>
               <table style={S.table}>
@@ -621,7 +590,7 @@ export default function App() {
           <div style={S.footerCard}>
             <div style={{ fontSize: 20, fontWeight: 800, marginBottom: 8 }}>テスト終了！</div>
             <div style={{ fontSize: 18, marginBottom: 12 }}>
-              正解数：{correct} / {questions.length} 問（{Math.round((correct / questions.length) * 100)}%）
+              正解数：{correct} / {questions.length} 問（{Math.round((correct / Math.max(questions.length, 1)) * 100)}%）
             </div>
             <div style={{ fontSize: 14, color: "#6b7280", marginBottom: 16 }}>
               所要時間：{mm}:{ss}
@@ -666,7 +635,7 @@ export default function App() {
 
 // --- 簡易テスト ---
 (function devTests() {
-  console.assert(stripPunctSpaces(" あ 。,。") === "あ", "strip/句読点");
+  console.assert(stripPunctSpaces(" あ 。,.。") === "あ", "strip/句読点");
   console.assert(kataToHira("オマエ") === "おまえ", "カタ→ひら");
   console.assert(normalize("  ア  ") === "あ", "normalize basic");
 })();

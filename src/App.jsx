@@ -111,17 +111,27 @@ export default function App() {
 
   // タイマー（quiz 中のみ進行）
   useEffect(() => {
-    if (phase !== "quiz") return;
-    if (review.visible) return; // ★追加：レビュー中はタイマーを止める
-    
-    if (remainSec <= 0) { // 時間切れ → その時点までの履歴でサマリへ
+  // 0秒判定は常に優先
+  if (remainSec <= 0) {
+    if (phase === "quiz") {
       setReview({ visible: false, rec: null });
       setPhase("summary");
-      return;
     }
-    timerRef.current = setTimeout(() => setRemainSec((r) => r - 1), 1000);
-    return () => clearTimeout(timerRef.current);
-  }, [phase, remainSec]);
+    return;
+  }
+
+  // 一時停止中は動かさない
+  if (isPaused) return;
+
+  // ★setIntervalで安定駆動（functional updateで最新値を参照）
+  const id = setInterval(() => {
+    setRemainSec((r) => (r > 0 ? r - 1 : 0));
+  }, 1000);
+
+  // クリーンアップ
+  return () => clearInterval(id);
+}, [isPaused, remainSec, phase]);  // ★ポイント：pause状態とremainSecを監視
+
 
   // スタート可能か
   const canStart = useMemo(() => studentName.trim().length > 0 && allPool.length > 0, [studentName, allPool.length]);

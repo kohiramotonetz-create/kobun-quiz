@@ -377,7 +377,7 @@ export default function App() {
         {phase === "postSubmit" && (
           <div style={S.card}>
             <div style={{ fontSize: 20, fontWeight: 800, marginBottom: 8 }}>送信ページ</div>
-            <div style={{ ...S.muted, marginBottom: 12 }}>結果は送信されました（no-cors のため応答は未確認）。必要に応じて下の学習を続けてください。</div>
+            <div style={{ ...S.muted, marginBottom: 12 }}>結果は送信されました。</div>
             <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
               <button style={{ ...S.primaryBtn, background: "#3B82F6" }} onClick={reviewWrong}>間違えた問題をもう一度</button>
               <button style={S.secBtn} onClick={backToStart}>もう一度最初からスタート</button>

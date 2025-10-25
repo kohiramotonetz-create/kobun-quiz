@@ -83,11 +83,13 @@ export default function App() {
 
   // 1問ごとのレビュー表示
   const [review, setReview] = useState({ visible: false, rec: null });
+  // ★追加：レビュー表示中 or quiz以外のときは一時停止扱い
+　const isPaused = (phase !== "quiz") || review.visible;
+
 
   // タイマー
   const [durationSec, setDurationSec] = useState(DEFAULT_DURATION_SEC);
   const [remainSec, setRemainSec] = useState(DEFAULT_DURATION_SEC);
-  const timerRef = useRef(null);
 
   // 送信
   const [sending, setSending] = useState(false);
@@ -111,7 +113,7 @@ export default function App() {
 
   // タイマー（quiz 中のみ進行）
   useEffect(() => {
-  // 0秒判定は常に優先
+  // 0秒になったら（quiz中のみ）サマリーへ
   if (remainSec <= 0) {
     if (phase === "quiz") {
       setReview({ visible: false, rec: null });
@@ -120,17 +122,18 @@ export default function App() {
     return;
   }
 
-  // 一時停止中は動かさない
+  // 一時停止中（quiz以外 or レビュー表示中）は動かさない
   if (isPaused) return;
 
-  // ★setIntervalで安定駆動（functional updateで最新値を参照）
+  // 1秒ごとに残り時間を減らす（functional update）
   const id = setInterval(() => {
     setRemainSec((r) => (r > 0 ? r - 1 : 0));
   }, 1000);
 
   // クリーンアップ
   return () => clearInterval(id);
-}, [isPaused, remainSec, phase]);  // ★ポイント：pause状態とremainSecを監視
+}, [isPaused, remainSec, phase]);
+
 
 
   // スタート可能か

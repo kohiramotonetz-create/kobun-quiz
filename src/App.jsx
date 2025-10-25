@@ -380,7 +380,7 @@ export default function App() {
             <div style={{ ...S.muted, marginBottom: 12 }}>結果は送信されました。</div>
             <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
               <button style={{ ...S.primaryBtn, background: "#3B82F6" }} onClick={reviewWrong}>間違えた問題をもう一度</button>
-              <button style={S.secBtn} onClick={backToStart}>もう一度最初からスタート</button>
+              <button style={{ ...S.primaryBtn, background: "#3B82F6" }} onClick={reviewWrong}>もう一度最初からスタート</button>
             </div>
 
             {/* 送信が未完了の場合に個別送信も可（再保険） */}

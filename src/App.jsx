@@ -362,7 +362,6 @@ export default function App() {
 
             <div style={{ display: "flex", gap: 8, marginTop: 16 }}>
               <button style={{ ...S.primaryBtn, flex: 1 }} onClick={handleSendFromSummary}>回答を送信</button>
-              <button style={{ ...S.secBtn }} onClick={reviewWrong}>間違いだけ復習</button>
             </div>
 
             {(sending || sendProgress > 0 || sendStatus) && (
